@@ -1,0 +1,282 @@
+    <!doctype html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#163d32"/><meta name="description" content="Compose once. Send notifications across Teams, Email, and Slack."/><title>Relay · Notifications</title></head><body><div id="app"></div><script type="module" src="/main.ts"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Send Notification</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: #202938;
+      background: #f5f7fb;
+    }
+
+    header {
+      background: #192d50;
+      color: white;
+      padding: 16px 24px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 55px);
+    }
+
+    aside {
+      width: 190px;
+      padding: 24px;
+      background: white;
+      border-right: 1px solid #e0e5ed;
+    }
+
+    aside p {
+      font-size: 12px;
+      color: #425575;
+      margin-bottom: 24px;
+    }
+
+    aside a {
+      display: block;
+      margin-bottom: 20px;
+      color: #202938;
+      text-decoration: none;
+    }
+
+    main {
+      flex: 1;
+      padding: 28px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+    }
+
+    .subtitle,
+    .hint {
+      color: #737d8e;
+      font-size: 13px;
+    }
+
+    .subtitle {
+      margin: 0 0 18px;
+    }
+
+    .card {
+      max-width: 520px;
+      padding: 20px;
+      background: white;
+      border: 1px solid #dce2ec;
+      border-radius: 10px;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 18px;
+    }
+
+    label,
+    legend {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 18px;
+      border: 1px solid #dce2ec;
+      border-radius: 5px;
+      font: inherit;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    fieldset {
+      padding: 0;
+      margin: 0;
+      border: 0;
+    }
+
+    legend {
+      margin-bottom: 10px;
+    }
+
+    .channels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .channel {
+      position: relative;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .channel input {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+    }
+
+    .channel span {
+      display: block;
+      min-width: 100px;
+      padding: 10px 18px;
+      text-align: center;
+      color: #2962ef;
+      background: #f0f5ff;
+      border: 1px solid #7198ff;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: normal;
+    }
+
+    .channel input:checked + span {
+      background: #2962ef;
+      color: white;
+    }
+
+    .channel input:focus-visible + span,
+    button:focus-visible {
+      outline: 3px solid #192d50;
+      outline-offset: 3px;
+    }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .hint {
+      margin: 0;
+    }
+
+    .send-button {
+      padding: 10px 24px;
+      background: #2962ef;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .send-button:hover {
+      background: #1e4fd0;
+    }
+
+    @media (max-width: 600px) {
+      .layout {
+        flex-direction: column;
+      }
+
+      aside {
+        width: 100%;
+        border-right: none;
+      }
+
+      main {
+        padding: 20px;
+      }
+
+      .footer {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>Send Notification</header>
+
+  <div class="layout">
+    <aside>
+      <p>NOTIFICATION CENTER</p>
+      <nav aria-label="Main navigation">
+        <a href="#">Dashboard</a>
+        <a href="#" aria-current="page">Send Notification</a>
+        <a href="#">History</a>
+        <a href="#">Settings</a>
+      </nav>
+    </aside>
+
+    <main>
+      <h1>Send Notification</h1>
+      <p class="subtitle">
+        Choose one or more channels and send a notification.
+      </p>
+
+      <form class="card">
+        <h2>Notification Details</h2>
+
+        <label for="subject">Title / Subject</label>
+        <input
+          id="subject"
+          name="subject"
+          type="text"
+          placeholder="Job Completed"
+        >
+
+        <label for="message">Message</label>
+        <textarea
+          id="message"
+          name="message"
+          placeholder="Customer data processing completed successfully."
+        ></textarea>
+
+        <fieldset>
+          <legend>Select Channels</legend>
+
+          <div class="channels">
+            <label class="channel">
+              <input type="checkbox" name="channels" value="teams">
+              <span>Teams</span>
+            </label>
+
+            <label class="channel">
+              <input type="checkbox" name="channels" value="email">
+              <span>Email</span>
+            </label>
+
+            <label class="channel">
+              <input type="checkbox" name="channels" value="slack">
+              <span>Slack</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="footer">
+          <p class="hint">Choose your notification destinations above.</p>
+          <button type="button" class="send-button">Send</button>
+        </div>
+      </form>
+    </main>
+  </div>
+</body>
+</html>
