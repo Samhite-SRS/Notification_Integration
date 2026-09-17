@@ -7,7 +7,7 @@
         <title>Notification Dashboard</title>
 
         <link rel="stylesheet" href="index.css"/>
-        <link rel="stylesheet" href="dashboard.css"/> 
+        <link rel="stylesheet" href="dashboard.css"/>
     </head>
 
     <body>
@@ -16,9 +16,9 @@
             <aside>
                 <p>NOTIFICATION CENTER</p>
                 <nav aria-label="Main navigation">
-                    <a href="#" aria-current="page">Dashboard</a>
-                    <a href="#">Send Notification</a>
-                    <a href="#">History</a>
+                    <a href="dashboard.html" aria-current="page">Dashboard</a>
+                    <a href="index.html">Send Notification</a>
+                    <a href="History.html">History</a>
                 </nav>
             </aside>
 
@@ -29,43 +29,97 @@
                 <div class="stats">
                     <div class="statistic">
                         <p class="subtitle">Total</p>
-                        <h2>20</h2>
+                        <h2 id="stat-total">&mdash;</h2>
                     </div>
 
                     <div class="statistic">
                         <p class="subtitle">Delivered</p>
-                        <h2 style="color : green">14</h2>
+                        <h2 style="color : green" id="stat-delivered">&mdash;</h2>
                     </div>
 
                     <div class="statistic">
                         <p class="subtitle">Pending</p>
-                        <h2 style="color : blue">4</h2>
+                        <h2 style="color : blue" id="stat-pending">&mdash;</h2>
                     </div>
 
                     <div class="statistic">
                         <p class="subtitle">Failed</p>
-                        <h2 style="color : red">2</h2>
+                        <h2 style="color : red" id="stat-failed">&mdash;</h2>
                     </div>
                 </div>
 
                 <div class="table-card">
                     <table>
+                        <thead>
                         <tr>
                             <th>Recipient</th>
                             <th>Channels</th>
                             <th>Status</th>
                             <th>Created</th>
                         </tr>
-                        <tr>
-                            <td>team-alerts</td>
-                            <td>Teams</td>
-                            <td>Delivered</td>
-                            <td>17 Sep 2026</td>
-                        </tr>
+                        </thead>
+                        <tbody id="recent-notifications-body">
+                            <tr><td colspan="4" class="table-empty">Loading...</td></tr>
+                        </tbody>
                     </table>
-                    
+
                 </div>
         </div>
-        
-    </body> 
+
+    </body>
+
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    (function () {
+      const tbody = document.getElementById("recent-notifications-body");
+
+      function setStat(id, value) {
+        document.getElementById(id).textContent = value;
+      }
+
+      function renderRows(notifications) {
+        if (notifications.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="table-empty">No notifications yet. Send one from the "Send Notification" page.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = notifications
+          .map((notification) => {
+            const channels = (notification.deliveries || []).map((d) => d.channel).join(", ");
+            const recipients = (notification.deliveries || []).map((d) => d.destination).join(", ");
+            const status = NotificationUi.overallStatus(notification);
+            const badge = `<span class="status-badge ${NotificationUi.statusClass(status)}">${NotificationUi.statusLabel(status)}</span>`;
+            return `<tr>
+              <td>${NotificationUi.escapeHtml(recipients)}</td>
+              <td>${NotificationUi.escapeHtml(channels)}</td>
+              <td>${badge}</td>
+              <td>${NotificationUi.formatTime(notification.created_at)}</td>
+            </tr>`;
+          })
+          .join("");
+      }
+
+      async function load() {
+        try {
+          const stats = await NotificationApi.getStats();
+          setStat("stat-total", stats.total);
+          setStat("stat-delivered", stats.delivered);
+          setStat("stat-pending", stats.pending);
+          setStat("stat-failed", stats.failed);
+        } catch (error) {
+          ["stat-total", "stat-delivered", "stat-pending", "stat-failed"].forEach((id) => setStat(id, "?"));
+        }
+
+        try {
+          const result = await NotificationApi.listNotifications({ limit: 10 });
+          renderRows(result.items);
+        } catch (error) {
+          tbody.innerHTML = `<tr><td colspan="4" class="table-error">${NotificationUi.escapeHtml(error.message)}</td></tr>`;
+        }
+      }
+
+      load();
+    })();
+  </script>
 </html>
