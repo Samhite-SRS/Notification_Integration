@@ -1,7 +1,8 @@
 -- MySQL schema for the Notification Management Application.
--- Mirrors app/models/notification.py exactly. Run this directly against a
--- MySQL server for a production-style setup, or let the app create these
--- same tables for you automatically (see app/db.py: init_db) for local dev.
+-- This is the single source of truth for the two tables - there is no ORM
+-- generating this from Python. Run it directly against MySQL, or let the
+-- app create the same tables automatically on startup (see app/db.py:
+-- init_db, which runs this exact DDL via PyMySQL).
 
 CREATE DATABASE IF NOT EXISTS notification_db
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

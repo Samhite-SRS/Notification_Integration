@@ -5,9 +5,9 @@ A Notification Management Application that lets a user send a message across
 retries failures, and accepts delivery-confirmation callbacks via a webhook.
 
 Built to the "Notification Management Application (Teams • Email • Slack)"
-spec: FastAPI backend + MySQL (SQLite for local dev) + a static HTML/CSS/JS
-frontend, with a provider-adapter layer so the service never talks to a
-vendor SDK directly.
+spec: FastAPI backend + MySQL (no ORM — raw SQL via PyMySQL) + a static
+HTML/CSS/JS frontend, with a provider-adapter layer so the service never
+talks to a vendor SDK directly.
 
 ```
 Frontend (static HTML/JS)  --fetch-->  FastAPI API layer  -->  Notification Service
@@ -22,9 +22,9 @@ Frontend (static HTML/JS)  --fetch-->  FastAPI API layer  -->  Notification Serv
                                                          channel's credentials
                                                          aren't configured)
 
-                                          Repository / Database Layer (SQLAlchemy)
+                                    Repository / Database Layer (raw SQL, PyMySQL)
                                                      |
-                                          MySQL (prod) / SQLite (local MVP)
+                                                   MySQL
 ```
 
 ## Project layout
@@ -35,14 +35,14 @@ Notification_Integration/
 │   ├── main.py                  # FastAPI entrypoint (CORS, DB init, router)
 │   ├── requirements.txt
 │   ├── .env.example             # copy to .env and fill in real credentials
-│   ├── schema.sql                # raw MySQL DDL (mirrors the ORM models)
+│   ├── schema.sql                # raw MySQL DDL - the single source of truth for the schema
 │   ├── app/
 │   │   ├── config.py             # Settings (env-driven)
-│   │   ├── db.py                 # SQLAlchemy engine/session
+│   │   ├── db.py                 # PyMySQL connection management (no ORM)
 │   │   ├── security.py           # webhook secret comparison, redaction
 │   │   ├── schemas.py            # Pydantic request/response models
-│   │   ├── models/                # ORM models (Notification, NotificationDelivery)
-│   │   ├── repositories/          # all direct DB access
+│   │   ├── models/                # plain dataclasses (Notification, NotificationDelivery)
+│   │   ├── repositories/          # the only place raw SQL is written
 │   │   ├── providers/             # Teams / Slack / Email adapters + Mock + factory
 │   │   ├── services/               # NotificationService, retry policy
 │   │   ├── webhooks/                # provider callback normalization
@@ -67,18 +67,33 @@ cp .env.example .env          # edit with real credentials, or leave blank for M
 uvicorn main:app --reload --port 8000
 ```
 
-On startup the app creates its tables automatically (`Base.metadata.create_all`),
-so no migration step is required for the SQLite path. Visit
+This requires a MySQL server to already be running (see below) — on startup
+the app connects via PyMySQL and creates its tables automatically if they
+don't exist yet (raw `CREATE TABLE IF NOT EXISTS`, no migration tool). Visit
 `http://localhost:8000/docs` for interactive Swagger docs.
 
-### Database
+### Database — MySQL only, no ORM
 
-- **Local / MVP (default):** `DATABASE_URL=sqlite:///./notification.db` — zero
-  setup, a file appears next to `main.py`.
-- **MySQL:** set `DATABASE_URL=mysql+pymysql://user:password@host:3306/notification_db`
-  in `.env`, then either let the app create the tables on first boot, or run
-  `Backend/schema.sql` directly against MySQL first (both define the same two
-  tables: `notifications`, `notification_deliveries`).
+There is no SQLite fallback and no SQLAlchemy: every read and write goes
+through raw SQL in `app/repositories/notification_repository.py`, executed
+via PyMySQL (`app/db.py`). A running MySQL server is required.
+
+1. Install and start MySQL (e.g. on macOS: `brew install mysql && brew services start mysql`).
+2. Create the database:
+   ```sql
+   CREATE DATABASE IF NOT EXISTS notification_db CHARACTER SET utf8mb4;
+   ```
+   (or run `Backend/schema.sql` directly, which creates both the database and
+   the two tables in one step — either way, the app will create the tables
+   itself on first boot if they don't already exist).
+3. Set these in `.env`:
+   ```
+   MYSQL_HOST=127.0.0.1
+   MYSQL_PORT=3306
+   MYSQL_USER=root
+   MYSQL_PASSWORD=your-password
+   MYSQL_DATABASE=notification_db
+   ```
 
 ### Provider credentials (all optional — Mock is the default)
 
@@ -173,13 +188,26 @@ Example create request:
 
 ## Tests
 
+Tests run against a dedicated MySQL database (`notification_test_db`),
+never the dev database — every test drops and recreates the two tables
+first. Create it once:
+
+```sql
+CREATE DATABASE IF NOT EXISTS notification_test_db CHARACTER SET utf8mb4;
+```
+
+Then run:
+
 ```bash
 cd Backend
 source .venv/bin/activate
-pytest -q
+MYSQL_PASSWORD=your-password pytest -q
 ```
 
-The suite runs fully offline against a throwaway SQLite file with
-`FORCE_MOCK_PROVIDERS=true`, covering the API (create/list/filter/stats/404s),
-bounded retry/backoff behavior, provider-factory fallback, and webhook
-security/idempotency.
+(`MYSQL_HOST`/`MYSQL_PORT`/`MYSQL_USER` default to `127.0.0.1`/`3306`/`root` —
+override the same way if yours differ.) `FORCE_MOCK_PROVIDERS=true` is set
+automatically by the test suite, so no real Teams/Slack/SMTP credentials or
+network access are needed — the 24 tests cover the API
+(create/list/filter/stats/404s), bounded retry/backoff behavior,
+provider-factory fallback, and webhook security/idempotency, all against a
+real MySQL schema.

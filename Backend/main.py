@@ -1,10 +1,10 @@
 """
 FastAPI application entrypoint.
 
-Wires together the pieces built under app/: creates tables on startup
-(spec's SQLite/local-MVP path needs no external migration step), enables
-CORS so the static Frontend/ pages can call this API from a browser, and
-mounts the router defined in app/api/routes.py.
+Wires together the pieces built under app/: creates the MySQL tables on
+startup if they don't exist yet (raw PyMySQL, no ORM - see app/db.py),
+enables CORS so the static Frontend/ pages can call this API from a
+browser, and mounts the router defined in app/api/routes.py.
 
 Run locally:
     uvicorn main:app --reload --port 8000
@@ -28,7 +28,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
-    logger.info("Database initialized (%s)", settings.database_url.split("://")[0])
+    logger.info("Database initialized (mysql: %s@%s:%s/%s)", settings.mysql_user, settings.mysql_host, settings.mysql_port, settings.mysql_database)
     for channel, configured in (
         ("teams", settings.teams_configured),
         ("slack", settings.slack_configured),
