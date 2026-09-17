@@ -1,15 +1,12 @@
-    <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#163d32"/><meta name="description" content="Compose once. Send notifications across Teams, Email, and Slack."/><title>Relay · Notifications</title></head><body><div id="app"></div><script type="module" src="/main.ts"></script></body></html>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#163d32">
+  <meta name="description" content="Compose once. Send notifications across Teams, Email, and Slack.">
   <title>Send Notification</title>
   <link rel="stylesheet" href="index.css">
-
-
-
 </head>
 
 <body>
@@ -19,9 +16,9 @@
     <aside>
       <p>NOTIFICATION CENTER</p>
       <nav aria-label="Main navigation">
-        <a href="#">Dashboard</a>
-        <a href="#" aria-current="page">Send Notification</a>
-        <a href="#">History</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="index.html" aria-current="page">Send Notification</a>
+        <a href="History.html">History</a>
       </nav>
     </aside>
 
@@ -31,7 +28,7 @@
         Choose one or more channels and send a notification.
       </p>
 
-      <form class="card">
+      <form class="card" id="send-form">
         <h2>Notification Details</h2>
 
         <label for="subject">Title / Subject</label>
@@ -40,6 +37,7 @@
           name="subject"
           type="text"
           placeholder="Job Completed"
+          required
         >
 
         <label for="message">Message</label>
@@ -47,6 +45,7 @@
           id="message"
           name="message"
           placeholder="Customer data processing completed successfully."
+          required
         ></textarea>
 
         <fieldset>
@@ -54,28 +53,130 @@
 
           <div class="channels">
             <label class="channel">
-              <input type="checkbox" name="channels" value="teams">
+              <input type="checkbox" name="channels" value="teams" data-channel-toggle="teams">
               <span>Teams</span>
             </label>
 
             <label class="channel">
-              <input type="checkbox" name="channels" value="email">
+              <input type="checkbox" name="channels" value="email" data-channel-toggle="email">
               <span>Email</span>
             </label>
 
             <label class="channel">
-              <input type="checkbox" name="channels" value="slack">
+              <input type="checkbox" name="channels" value="slack" data-channel-toggle="slack">
               <span>Slack</span>
             </label>
           </div>
         </fieldset>
 
+        <div class="channel-destination hidden" data-channel-fields="teams">
+          <label for="teams-destination">Teams destination</label>
+          <input id="teams-destination" type="text" placeholder="ops-channel or teammate@example.com">
+        </div>
+
+        <div class="channel-destination hidden" data-channel-fields="email">
+          <label for="email-destination">Email recipient</label>
+          <input id="email-destination" type="email" placeholder="teammate@example.com">
+        </div>
+
+        <div class="channel-destination hidden" data-channel-fields="slack">
+          <label for="slack-destination">Slack destination</label>
+          <input id="slack-destination" type="text" placeholder="#engineering or teammate@example.com">
+        </div>
+
+        <p id="form-feedback" class="hint" role="status" aria-live="polite"></p>
+
         <div class="footer">
           <p class="hint">Choose your notification destinations above.</p>
-          <button type="button" class="send-button">Send</button>
+          <button type="submit" class="send-button" id="send-button">Send</button>
         </div>
       </form>
     </main>
   </div>
+
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    (function () {
+      const form = document.getElementById("send-form");
+      const feedback = document.getElementById("form-feedback");
+      const sendButton = document.getElementById("send-button");
+
+      // Show the matching destination field only once its channel checkbox is checked.
+      document.querySelectorAll("[data-channel-toggle]").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          const fields = document.querySelector(`[data-channel-fields="${checkbox.dataset.channelToggle}"]`);
+          fields.classList.toggle("hidden", !checkbox.checked);
+        });
+      });
+
+      function buildChannelsPayload() {
+        const channels = {};
+
+        const teamsChecked = document.querySelector('[data-channel-toggle="teams"]').checked;
+        const emailChecked = document.querySelector('[data-channel-toggle="email"]').checked;
+        const slackChecked = document.querySelector('[data-channel-toggle="slack"]').checked;
+
+        if (teamsChecked) {
+          const destination = document.getElementById("teams-destination").value.trim();
+          if (!destination) throw new Error("Enter a Teams destination.");
+          channels.teams = [{ destination }];
+        }
+        if (emailChecked) {
+          const recipient = document.getElementById("email-destination").value.trim();
+          if (!recipient) throw new Error("Enter an Email recipient.");
+          channels.email = [{ recipient, subject: document.getElementById("subject").value.trim() || null }];
+        }
+        if (slackChecked) {
+          const destination = document.getElementById("slack-destination").value.trim();
+          if (!destination) throw new Error("Enter a Slack destination.");
+          channels.slack = [{ destination }];
+        }
+
+        if (Object.keys(channels).length === 0) {
+          throw new Error("Select at least one channel.");
+        }
+        return channels;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        feedback.textContent = "";
+        feedback.className = "hint";
+
+        let payload;
+        try {
+          payload = {
+            title: document.getElementById("subject").value.trim(),
+            message: document.getElementById("message").value.trim(),
+            channels: buildChannelsPayload(),
+          };
+        } catch (validationError) {
+          feedback.textContent = validationError.message;
+          feedback.className = "hint error";
+          return;
+        }
+
+        sendButton.disabled = true;
+        sendButton.textContent = "Sending...";
+        try {
+          const notification = await NotificationApi.createNotification(payload);
+          const summary = notification.deliveries
+            .map((d) => `${d.channel}: ${NotificationUi.statusLabel(d.status)}`)
+            .join(" · ");
+          feedback.textContent = `Sent. ${summary}`;
+          feedback.className = "hint success";
+          form.reset();
+          document.querySelectorAll(".channel-destination").forEach((el) => el.classList.add("hidden"));
+        } catch (error) {
+          feedback.textContent = `Failed to send: ${error.message}`;
+          feedback.className = "hint error";
+        } finally {
+          sendButton.disabled = false;
+          sendButton.textContent = "Send";
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
