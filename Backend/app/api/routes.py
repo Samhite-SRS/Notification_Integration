@@ -7,10 +7,9 @@ import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.db import get_db
+from app.db import Database, get_db
 from app.schemas import (
     NotificationCreateRequest,
     NotificationListOut,
@@ -33,7 +32,7 @@ def health():
 @router.post("/api/notifications", response_model=NotificationOut, status_code=201, tags=["notifications"])
 def create_notification(
     payload: NotificationCreateRequest,
-    db: Session = Depends(get_db),
+    db: Database = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     """FR-01: valid request creates a notification and per-channel
@@ -49,7 +48,7 @@ def list_notifications(
     q: str | None = Query(None, description="Search title, message, destination or id"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    db: Database = Depends(get_db),
 ):
     """FR-11: list and filter notification history."""
     items, total = service.list_notifications(
@@ -59,12 +58,12 @@ def list_notifications(
 
 
 @router.get("/api/stats", response_model=StatsOut, tags=["notifications"])
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(db: Database = Depends(get_db)):
     return service.get_stats(db)
 
 
 @router.get("/api/notifications/{notification_id}", response_model=NotificationOut, tags=["notifications"])
-def get_notification(notification_id: str, db: Session = Depends(get_db)):
+def get_notification(notification_id: str, db: Database = Depends(get_db)):
     try:
         return service.get_notification(db, notification_id)
     except service.NotificationNotFoundError:
@@ -74,7 +73,7 @@ def get_notification(notification_id: str, db: Session = Depends(get_db)):
 @router.post("/api/notifications/{notification_id}/retry", response_model=NotificationOut, tags=["notifications"])
 def retry_notification(
     notification_id: str,
-    db: Session = Depends(get_db),
+    db: Database = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     """FR-09: retry failed channel deliveries for this notification,
@@ -90,7 +89,7 @@ def receive_webhook(
     provider: str,
     payload: dict,
     x_webhook_secret: str | None = Header(default=None),
-    db: Session = Depends(get_db),
+    db: Database = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     """FR-10/FR-12: provider delivery-status callback. Protected by a

@@ -12,8 +12,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Database ---------------------------------------------------------
-    database_url: str = "sqlite:///./notification.db"
+    # Database (MySQL only - no ORM, connected directly via PyMySQL) ---
+    mysql_host: str = "127.0.0.1"
+    mysql_port: int = 3306
+    mysql_user: str = "root"
+    mysql_password: str = ""
+    mysql_database: str = "notification_db"
 
     # Teams --------------------------------------------------------------
     teams_webhook_url: str = ""

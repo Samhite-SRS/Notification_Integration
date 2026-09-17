@@ -7,9 +7,8 @@ on a specific vendor SDK - see app/providers/factory.py for that mapping.
 """
 import logging
 
-from sqlalchemy.orm import Session
-
 from app.config import Settings
+from app.db import Database
 from app.providers.factory import get_provider
 from app.repositories import notification_repository as repo
 from app.schemas import NotificationCreateRequest
@@ -27,7 +26,7 @@ class InvalidWebhookSecretError(Exception):
     pass
 
 
-def create_and_send(db: Session, payload: NotificationCreateRequest, settings: Settings):
+def create_and_send(db: Database, payload: NotificationCreateRequest, settings: Settings):
     """FR-01/02/03/04/05/06/08: create the notification + one delivery
     record per requested destination, then attempt delivery on each
     channel independently so one channel failing never affects another
@@ -63,39 +62,37 @@ def create_and_send(db: Session, payload: NotificationCreateRequest, settings: S
             backoff_base_seconds=settings.retry_backoff_base_seconds,
         )
 
+        # attempts==1 -> no retry happened -> retry_count stays 0.
+        delivery.retry_count = attempts - 1
         repo.update_delivery_status(
             db,
             delivery,
             status=result.status,
             provider_message_id=result.provider_message_id,
             error_message=result.error_message,
-            increment_retry=attempts > 1,
         )
-        if attempts > 1:
-            delivery.retry_count = attempts - 1
-            db.flush()
+        notification.deliveries.append(delivery)
 
     db.commit()
-    db.refresh(notification)
     return notification
 
 
-def get_notification(db: Session, notification_id: str):
+def get_notification(db: Database, notification_id: str):
     notification = repo.get_notification(db, notification_id)
     if notification is None:
         raise NotificationNotFoundError(notification_id)
     return notification
 
 
-def list_notifications(db: Session, *, channel=None, status=None, search=None, limit=50, offset=0):
+def list_notifications(db: Database, *, channel=None, status=None, search=None, limit=50, offset=0):
     return repo.list_notifications(db, channel=channel, status=status, search=search, limit=limit, offset=offset)
 
 
-def get_stats(db: Session):
+def get_stats(db: Database):
     return repo.stats(db)
 
 
-def retry_notification(db: Session, notification_id: str, settings: Settings):
+def retry_notification(db: Database, notification_id: str, settings: Settings):
     """POST /api/notifications/{id}/retry - re-attempt every FAILED
     delivery under this notification (FR-09: bounded, never indefinite)."""
     notification = repo.get_notification(db, notification_id)
@@ -129,11 +126,10 @@ def retry_notification(db: Session, notification_id: str, settings: Settings):
         )
 
     db.commit()
-    db.refresh(notification)
     return notification
 
 
-def handle_webhook(db: Session, provider: str, secret_header: str | None, settings: Settings, event):
+def handle_webhook(db: Database, provider: str, secret_header: str | None, settings: Settings, event):
     """POST /api/webhooks/{provider} - provider delivery-confirmation
     callback. FR-10/FR-12: updates final status, is idempotent against
     duplicate callbacks, and never raises on an unknown notification id -
@@ -158,5 +154,4 @@ def handle_webhook(db: Session, provider: str, secret_header: str | None, settin
 
     repo.update_delivery_status(db, delivery, status=event.status, error_message=event.error_message)
     db.commit()
-    db.refresh(delivery)
     return delivery
