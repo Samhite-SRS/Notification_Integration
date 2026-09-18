@@ -310,32 +310,33 @@ header {
     <aside>
       <p>NOTIFICATION CENTER</p>
       <nav aria-label="Main navigation">
-        <a href="#">Dashboard</a>
-        <a href="#">Send Notification</a>
-        <a href="#" aria-current="page">History</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="index.html">Send Notification</a>
+        <a href="History.html" aria-current="page">History</a>
       </nav>
     </aside>
 
     <main>
         <h1>Notification History</h1>
         <p class="subtitle">
-           Search and filter notification delivery records. 
+           Search and filter notification delivery records.
         </p>
       <div class="search-bar">
-        <input 
+        <input
+        id="search-input"
         type="search"
         placeholder="Search recipient, message or ID"
         aria-label="Search notification history "
         >
 
-        <select aria-label="Filter by status">
+        <select id="status-filter" aria-label="Filter by status">
           <option value="all">Filter: All</option>
           <option value="delivered">Delivered</option>
           <option value="pending">Pending</option>
           <option value="failed">Failed</option>
         </select>
       </div>
-    
+
     <div class="history-card">
         <table>
         <thead>
@@ -345,48 +346,87 @@ header {
         <th scope="col">Destination</th>
         <th scope="col">Status</th>
         <th scope="col">Retry</th>
-        <th scope="col">Time</th>  
+        <th scope="col">Time</th>
             </tr>
         </thead>
 
-        <tbody>
-      <tr>
-        <td>N-1028</td>
-        <td>Teams</td>
-        <td>team-alerts</td>
-        <td class="delivered">Delivered</td>
-        <td>0</td>
-        <td>10:42</td>
-      </tr>
-      <tr>
-        <td>N-1027</td>
-        <td>Email</td>
-        <td>user@example.com</td>
-        <td class="pending">Pending</td>
-        <td>0</td>
-        <td>10:38</td>
-      </tr>
-
-      <tr>
-        <td>N-1026</td>
-        <td>Slack</td>
-        <td>#engineering</td>
-        <td class="failed">Failed</td>
-        <td>2</td>
-        <td>10:35</td>
-      </tr>
-       <tr>
-        <td>N-1025</td>
-        <td>Email + Slack</td>
-        <td>2 destinations</td>
-        <td class="delivered">Delivered</td>
-        <td>0</td>
-        <td>10:31</td>
-            </tr>
-    </tbody>
+        <tbody id="history-body">
+          <tr><td colspan="6" class="table-empty">Loading...</td></tr>
+        </tbody>
   </table>
 </div>
 </main>
 </div>
+
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    (function () {
+      const tbody = document.getElementById("history-body");
+      const searchInput = document.getElementById("search-input");
+      const statusFilter = document.getElementById("status-filter");
+      let debounceHandle = null;
+
+      function statusCssClass(status) {
+        // History.html has its own inline .delivered/.pending/.failed rules
+        // (separate from the shared .status-badge classes used elsewhere).
+        return NotificationUi.statusClass(status);
+      }
+
+      // The UI's "Delivered" filter should match both SENT and DELIVERED
+      // (the backend only knows the literal status column), so filtering
+      // happens client-side per delivery rather than via the status= param.
+      const FILTER_STATUSES = {
+        delivered: ["SENT", "DELIVERED"],
+        pending: ["PENDING"],
+        failed: ["FAILED"],
+      };
+
+      function renderRows(notifications) {
+        const statusValue = statusFilter.value;
+        const allowedStatuses = FILTER_STATUSES[statusValue];
+
+        const rows = [];
+        notifications.forEach((notification) => {
+          const shortId = notification.id.slice(0, 8);
+          (notification.deliveries || []).forEach((delivery) => {
+            if (allowedStatuses && !allowedStatuses.includes((delivery.status || "").toUpperCase())) return;
+            rows.push(`<tr>
+              <td>${NotificationUi.escapeHtml(shortId)}</td>
+              <td>${NotificationUi.escapeHtml(delivery.channel)}</td>
+              <td>${NotificationUi.escapeHtml(delivery.destination)}</td>
+              <td class="${statusCssClass(delivery.status)}">${NotificationUi.statusLabel(delivery.status)}</td>
+              <td>${delivery.retry_count}</td>
+              <td>${NotificationUi.formatTime(delivery.created_at)}</td>
+            </tr>`);
+          });
+        });
+
+        tbody.innerHTML = rows.length
+          ? rows.join("")
+          : '<tr><td colspan="6" class="table-empty">No matching notifications.</td></tr>';
+      }
+
+      async function load() {
+        const params = { q: searchInput.value.trim() || undefined, limit: 100 };
+
+        tbody.innerHTML = '<tr><td colspan="6" class="table-empty">Loading...</td></tr>';
+        try {
+          const result = await NotificationApi.listNotifications(params);
+          renderRows(result.items);
+        } catch (error) {
+          tbody.innerHTML = `<tr><td colspan="6" class="table-error">${NotificationUi.escapeHtml(error.message)}</td></tr>`;
+        }
+      }
+
+      searchInput.addEventListener("input", () => {
+        clearTimeout(debounceHandle);
+        debounceHandle = setTimeout(load, 300);
+      });
+      statusFilter.addEventListener("change", load);
+
+      load();
+    })();
+  </script>
 </body>
 </html>
