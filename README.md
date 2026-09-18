@@ -31,10 +31,12 @@ Frontend (static HTML/JS)  --fetch-->  FastAPI API layer  -->  Notification Serv
 
 ```
 Notification_Integration/
+├── docker-compose.yml            # one-command stack: MySQL + Backend + Frontend
 ├── Backend/
 │   ├── main.py                  # FastAPI entrypoint (CORS, DB init, router)
 │   ├── requirements.txt
 │   ├── .env.example             # copy to .env and fill in real credentials
+│   ├── Dockerfile
 │   ├── schema.sql                # raw MySQL DDL - the single source of truth for the schema
 │   ├── app/
 │   │   ├── config.py             # Settings (env-driven)
@@ -49,6 +51,7 @@ Notification_Integration/
 │   │   └── api/                     # FastAPI routes
 │   └── tests/                        # pytest suite (offline, MockProvider only)
 └── Frontend/
+    ├── Dockerfile
     ├── index.html                    # Send Notification form
     ├── dashboard.html                # stats + recent notifications
     ├── History.html                  # search/filter notification history
@@ -56,7 +59,32 @@ Notification_Integration/
     └── common.js                     # shared fetch helpers used by all 3 pages
 ```
 
-## Running the backend
+## Running it with Docker (recommended for a quick demo)
+
+```bash
+cp Backend/.env.example Backend/.env   # edit with real credentials, or leave blank for Mock
+docker compose up --build
+```
+
+Starts MySQL + the backend + the frontend together, in one command:
+
+- Frontend: `http://localhost:5500/index.html`
+- Backend docs: `http://localhost:8000/docs`
+
+This MySQL is a fresh, empty database living in its own Docker volume,
+separate from any MySQL you run natively — no local MySQL install needed.
+`Backend/.env`'s `MYSQL_*` values are ignored under Docker (the compose file
+always points the backend at its own `mysql` service instead); everything
+else in that file — Teams/Slack/SMTP credentials, retry settings, webhook
+secret — is used exactly as it would be running natively. The backend
+container bind-mounts `Backend/`, so editing the code on your machine still
+hot-reloads it, same as `uvicorn --reload`. See `docker-compose.yml` for
+details, including how to override the MySQL root password.
+
+Stop everything with `docker compose down` (add `-v` to also delete the
+MySQL data volume and start fresh next time).
+
+## Running the backend (without Docker)
 
 ```bash
 cd Backend
@@ -185,11 +213,24 @@ Example create request:
   shared-secret header, ignores callbacks for unknown message ids without
   erroring, no-ops on a duplicate status, and never lets a stale `FAILED`
   callback overwrite an already-`DELIVERED` status.
+- **Cross-notification threading:** repeated notifications sent to the same
+  (channel, destination) pair land in one running conversation instead of as
+  separate, unrelated messages. A `channel_threads` table (see
+  `schema.sql`) stores one "anchor" per (channel, destination) — a Slack
+  `thread_ts` or an Email `Message-ID` — the first time a message is sent
+  there. Every later send to that same destination looks up the anchor
+  first and passes it to the provider: Slack replies in-thread (`thread_ts`),
+  Email sets `In-Reply-To`/`References` and prefixes the subject with "Re: ".
+  Teams intentionally ignores this (see `app/providers/teams/provider.py`) —
+  a Teams 1:1 chat is already one continuous conversation, so there is
+  nothing to thread. The anchor is "first write wins": once saved for a
+  destination it is never overwritten, so every later message threads off
+  the original root.
 
 ## Tests
 
 Tests run against a dedicated MySQL database (`notification_test_db`),
-never the dev database — every test drops and recreates the two tables
+never the dev database — every test drops and recreates the tables
 first. Create it once:
 
 ```sql
@@ -207,7 +248,7 @@ MYSQL_PASSWORD=your-password pytest -q
 (`MYSQL_HOST`/`MYSQL_PORT`/`MYSQL_USER` default to `127.0.0.1`/`3306`/`root` —
 override the same way if yours differ.) `FORCE_MOCK_PROVIDERS=true` is set
 automatically by the test suite, so no real Teams/Slack/SMTP credentials or
-network access are needed — the 24 tests cover the API
+network access are needed — the 30 tests cover the API
 (create/list/filter/stats/404s), bounded retry/backoff behavior,
-provider-factory fallback, and webhook security/idempotency, all against a
-real MySQL schema.
+provider-factory fallback, webhook security/idempotency, and cross-notification
+threading (`tests/test_threading.py`), all against a real MySQL schema.

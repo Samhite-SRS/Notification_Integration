@@ -15,17 +15,18 @@ class FlakyProvider:
         self.fail_times = fail_times
         self.calls = 0
 
-    def send(self, *, destination, title, message, subject=None):
+    def send(self, *, destination, title, message, subject=None, thread_key=None):
         self.calls += 1
+        self.last_thread_key = thread_key
         if self.calls <= self.fail_times:
             return ProviderResult(success=False, status="FAILED", error_message="temporary", retryable=True)
-        return ProviderResult(success=True, status="SENT", provider_message_id="mid-1")
+        return ProviderResult(success=True, status="SENT", provider_message_id="mid-1", thread_key=thread_key or "root-1")
 
 
 class AlwaysNonRetryable:
     name = "nr"
 
-    def send(self, *, destination, title, message, subject=None):
+    def send(self, *, destination, title, message, subject=None, thread_key=None):
         return ProviderResult(success=False, status="FAILED", error_message="bad request", retryable=False)
 
 
@@ -86,3 +87,44 @@ def test_non_retryable_failure_stops_immediately_without_sleeping():
     assert attempts == 1
     assert result.success is False
     assert result.retryable is False
+
+
+def test_thread_key_is_passed_through_unchanged_on_every_attempt():
+    """A retry must not invent a new thread - every attempt (including
+    retries) gets the same thread_key the caller supplied, and the
+    provider is expected to just echo it back."""
+    provider = FlakyProvider(fail_times=2)
+
+    result, attempts = send_with_retry(
+        provider,
+        destination="d",
+        title="t",
+        message="m",
+        subject=None,
+        thread_key="existing-root",
+        max_attempts=5,
+        backoff_base_seconds=0.01,
+        sleep_fn=lambda seconds: None,
+    )
+
+    assert attempts == 3
+    assert provider.last_thread_key == "existing-root"
+    assert result.thread_key == "existing-root"
+
+
+def test_no_thread_key_means_provider_mints_a_new_root():
+    provider = FlakyProvider(fail_times=0)
+
+    result, _ = send_with_retry(
+        provider,
+        destination="d",
+        title="t",
+        message="m",
+        subject=None,
+        max_attempts=1,
+        backoff_base_seconds=0.01,
+        sleep_fn=lambda seconds: None,
+    )
+
+    assert provider.last_thread_key is None
+    assert result.thread_key == "root-1"

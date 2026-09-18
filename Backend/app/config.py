@@ -12,37 +12,37 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Database (MySQL only - no ORM, connected directly via PyMySQL) ---
+    # Database (MySQL only - no ORM, connected directly via PyMySQL) 
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306
     mysql_user: str = "root"
     mysql_password: str = ""
     mysql_database: str = "notification_db"
 
-    # Teams --------------------------------------------------------------
+    # Teams 
     teams_webhook_url: str = ""
 
-    # Slack ----------------------------------------------------------------
+    # Slack 
     slack_bot_token: str = ""
 
-    # Email / SMTP -----------------------------------------------------
+    # Email / SMTP 
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_sender_email: str = ""
 
-    # Providers ------------------------------------------------------------
+    # Providers 
     force_mock_providers: bool = False
 
-    # Retry policy -----------------------------------------------------
+    # Retry policy 
     retry_max_attempts: int = 3
     retry_backoff_base_seconds: float = 2.0
 
-    # Webhook security -------------------------------------------------
+    # Webhook security 
     webhook_shared_secret: str = "change-me"
 
-    # CORS ---------------------------------------------------------------
+    # CORS 
     cors_origins: str = "*"
 
     @property
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
             return ["*"]
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
-    # --- capability checks used by the provider factory -----------------
+    # --- capability checks used by the provider factory -----
     @property
     def teams_configured(self) -> bool:
         return bool(self.teams_webhook_url) and not self.force_mock_providers

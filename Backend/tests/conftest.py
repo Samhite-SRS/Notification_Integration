@@ -35,13 +35,14 @@ from app.db import _connect  # noqa: E402
 
 
 def _reset_schema():
-    """Drop and recreate both tables so every test starts from empty."""
+    """Drop and recreate all tables so every test starts from empty."""
     connection = _connect()
     try:
         with connection.cursor() as cursor:
             cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
             cursor.execute("DROP TABLE IF EXISTS notification_deliveries")
             cursor.execute("DROP TABLE IF EXISTS notifications")
+            cursor.execute("DROP TABLE IF EXISTS channel_threads")
             cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
         connection.commit()
     finally:
