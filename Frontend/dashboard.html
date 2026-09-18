@@ -6,8 +6,8 @@
         <meta name="description" content = "View information about the notifications"/>
         <title>Notification Dashboard</title>
 
-        <link rel="stylesheet" href="index.css"/>
-        <link rel="stylesheet" href="dashboard.css"/> 
+        <link rel="stylesheet" href="static/index.css"/>
+        <link rel="stylesheet" href="static/dashboard.css"/> 
     </head>
 
     <body>
@@ -16,9 +16,9 @@
             <aside>
                 <p>NOTIFICATION CENTER</p>
                 <nav aria-label="Main navigation">
-                    <a href="#" aria-current="page">Dashboard</a>
-                    <a href="#">Send Notification</a>
-                    <a href="#">History</a>
+                    <a href="dashboard.html" aria-current="page">Dashboard</a>
+                    <a href="index.html">Send Notification</a>
+                    <a href="History.html">History</a>
                 </nav>
             </aside>
 
@@ -29,22 +29,22 @@
                 <div class="stats">
                     <div class="statistic">
                         <p class="subtitle">Total</p>
-                        <h2>20</h2>
+                        <h2>{{ total }}</h2>
                     </div>
 
                     <div class="statistic">
                         <p class="subtitle">Delivered</p>
-                        <h2 style="color : green">14</h2>
+                        <h2 style="color : green">{{ delivered }}</h2>
                     </div>
 
                     <div class="statistic">
                         <p class="subtitle">Pending</p>
-                        <h2 style="color : blue">4</h2>
+                        <h2 style="color : blue">{{ pending }}</h2>
                     </div>
 
                     <div class="statistic">
                         <p class="subtitle">Failed</p>
-                        <h2 style="color : red">2</h2>
+                        <h2 style="color : red">{{ failed }}</h2>
                     </div>
                 </div>
 
@@ -56,12 +56,16 @@
                             <th>Status</th>
                             <th>Created</th>
                         </tr>
+                        {% for notification in notifications %}
                         <tr>
-                            <td>team-alerts</td>
-                            <td>Teams</td>
-                            <td>Delivered</td>
-                            <td>17 Sep 2026</td>
+
+                            <td>{{ notification.recipient }}</td>
+                            <td>{{ notification.channel }}</td>
+                            <td>{{ notification.status }}</td>
+                            <td>{{ notification.created }}</td>
+
                         </tr>
+                        {% endfor %}
                     </table>
                     
                 </div>
