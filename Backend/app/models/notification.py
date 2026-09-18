@@ -5,9 +5,6 @@ fills them in by hand from raw SQL query results (dict rows from PyMySQL's
 DictCursor), and app/schemas.py converts them straight to API responses
 (Pydantic's `from_attributes` works on any object with matching attributes,
 a dataclass included - it doesn't require an ORM).
-
-The fields here match spec section 12 ("Database Requirements") and the
-columns in schema.sql exactly.
 """
 from dataclasses import dataclass, field
 from datetime import datetime

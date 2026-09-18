@@ -43,14 +43,19 @@ def create_and_send(db: Database, payload: NotificationCreateRequest, settings: 
 
     for channel, destination, subject in plan:
         provider = get_provider(channel, settings)
+        channel_upper = channel.upper()
         delivery = repo.add_delivery(
             db,
             notification_id=notification.id,
-            channel=channel.upper(),
+            channel=channel_upper,
             destination=destination,
             provider=provider.name,
             status="PENDING",
         )
+
+        # Reply into this recipient's existing thread on this channel, if
+        # one already exists, instead of starting a new one every time.
+        thread_key = repo.get_thread_key(db, channel_upper, destination)
 
         result, attempts = send_with_retry(
             provider,
@@ -58,6 +63,7 @@ def create_and_send(db: Database, payload: NotificationCreateRequest, settings: 
             title=payload.title,
             message=payload.message,
             subject=subject,
+            thread_key=thread_key,
             max_attempts=settings.retry_max_attempts,
             backoff_base_seconds=settings.retry_backoff_base_seconds,
         )
@@ -71,6 +77,11 @@ def create_and_send(db: Database, payload: NotificationCreateRequest, settings: 
             provider_message_id=result.provider_message_id,
             error_message=result.error_message,
         )
+        if result.thread_key:
+            # First time for this recipient this just records the new
+            # thread's anchor; every time after, it's a no-op (see
+            # save_thread_key) since the anchor never changes.
+            repo.save_thread_key(db, channel_upper, destination, result.thread_key)
         notification.deliveries.append(delivery)
 
     db.commit()
@@ -105,6 +116,7 @@ def retry_notification(db: Database, notification_id: str, settings: Settings):
 
         remaining = max(settings.retry_max_attempts - delivery.retry_count, 1)
         provider = get_provider(delivery.channel.lower(), settings)
+        thread_key = repo.get_thread_key(db, delivery.channel, delivery.destination)
 
         result, attempts = send_with_retry(
             provider,
@@ -112,6 +124,7 @@ def retry_notification(db: Database, notification_id: str, settings: Settings):
             title=notification.title,
             message=notification.message,
             subject=None,
+            thread_key=thread_key,
             max_attempts=remaining,
             backoff_base_seconds=settings.retry_backoff_base_seconds,
         )
@@ -124,6 +137,8 @@ def retry_notification(db: Database, notification_id: str, settings: Settings):
             provider_message_id=result.provider_message_id,
             error_message=result.error_message,
         )
+        if result.thread_key:
+            repo.save_thread_key(db, delivery.channel, delivery.destination, result.thread_key)
 
     db.commit()
     return notification

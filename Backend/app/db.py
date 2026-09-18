@@ -7,12 +7,17 @@ thin connection layer: it opens a PyMySQL connection per request and hands
 it to the repository layer (app/repositories/notification_repository.py),
 which is the only place that writes SQL.
 """
+import logging
+import socket
+import time
+
 import pymysql
 import pymysql.cursors
 
 from app.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger("notification_app")
 
 
 def _connect():
@@ -25,6 +30,35 @@ def _connect():
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False,
     )
+
+
+def _connect_with_retry(max_attempts: int = 10, delay_seconds: float = 1.5, sleep_fn=time.sleep):
+    """Only used by init_db() at startup - retries a transient connection
+    failure (MySQL still finishing InnoDB startup, or - under Docker
+    Compose - the container's DNS not being fully ready the instant a
+    freshly created container starts, even though the mysql service's own
+    healthcheck already passed) instead of crashing the whole app on the
+    very first attempt. Every other place that opens a connection
+    (get_db(), the per-request dependency) intentionally does NOT retry -
+    by the time a request comes in, startup has already succeeded once, so
+    a fresh failure there is a real problem, not a startup race."""
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return _connect()
+        except (pymysql.err.OperationalError, socket.gaierror, OSError) as exc:
+            last_error = exc
+            if attempt < max_attempts:
+                logger.warning(
+                    "MySQL not reachable yet (attempt %d/%d): %s - retrying in %.1fs",
+                    attempt,
+                    max_attempts,
+                    exc,
+                    delay_seconds,
+                )
+                sleep_fn(delay_seconds)
+    assert last_error is not None
+    raise last_error
 
 
 class Database:
@@ -65,10 +99,12 @@ def get_db():
 
 
 def init_db() -> None:
-    """Create the two tables if they don't exist yet. Same DDL as
-    schema.sql, run directly through PyMySQL - kept in sync by hand since
-    there is no ORM to generate it."""
-    connection = _connect()
+    """Create the tables if they don't exist yet. Same DDL as schema.sql,
+    run directly through PyMySQL - kept in sync by hand since there is no
+    ORM to generate it. Uses _connect_with_retry (see above) since this is
+    the one connection attempt that runs at app startup, before anything
+    else has proven MySQL is actually reachable yet."""
+    connection = _connect_with_retry()
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -101,6 +137,17 @@ def init_db() -> None:
                     INDEX idx_notification_deliveries_channel (channel),
                     INDEX idx_notification_deliveries_status (status),
                     INDEX idx_notification_deliveries_provider_message_id (provider_message_id)
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS channel_threads (
+                    channel      VARCHAR(20)  NOT NULL,
+                    destination  VARCHAR(255) NOT NULL,
+                    thread_key   VARCHAR(512) NOT NULL,
+                    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (channel, destination)
                 ) ENGINE=InnoDB
                 """
             )

@@ -9,9 +9,9 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
-# ---------------------------------------------------------------------------
+
 # Requests
-# ---------------------------------------------------------------------------
+
 class TeamsChannelEntry(BaseModel):
     destination: str = Field(..., min_length=1, description="Teams recipient, e.g. an email address")
 
@@ -44,9 +44,9 @@ class NotificationCreateRequest(BaseModel):
         return channels
 
 
-# ---------------------------------------------------------------------------
+
 # Responses
-# ---------------------------------------------------------------------------
+
 class NotificationDeliveryOut(BaseModel):
     id: str
     channel: str

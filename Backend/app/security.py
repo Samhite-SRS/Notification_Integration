@@ -1,7 +1,6 @@
 """
 Small helpers used everywhere a secret could otherwise leak: API responses,
-log lines, error messages stored in the database, etc. (spec section 14,
-"Never expose credentials in responses or logs".)
+log lines, error messages stored in the database, etc. 
 """
 import hmac
 

@@ -201,6 +201,33 @@ def update_delivery_status(
     return delivery
 
 
+def get_thread_key(db: Database, channel: str, destination: str) -> str | None:
+    """The existing thread anchor for this (channel, destination), if any
+    prior notification to this recipient already established one."""
+    cursor = db.execute(
+        "SELECT thread_key FROM channel_threads WHERE channel = %s AND destination = %s",
+        (channel, destination),
+    )
+    row = cursor.fetchone()
+    return row["thread_key"] if row else None
+
+
+def save_thread_key(db: Database, channel: str, destination: str, thread_key: str) -> None:
+    """Records the thread anchor the *first* time we see one for this
+    (channel, destination) and leaves it alone after that - every later
+    notification to the same recipient should keep replying into the same
+    original thread, not restart it, so a second call with a different
+    value is a deliberate no-op via ON DUPLICATE KEY UPDATE."""
+    db.execute(
+        """
+        INSERT INTO channel_threads (channel, destination, thread_key, created_at)
+        VALUES (%s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE thread_key = thread_key
+        """,
+        (channel, destination, thread_key, _now()),
+    )
+
+
 def stats(db: Database) -> dict:
     total = db.execute("SELECT COUNT(*) AS c FROM notifications").fetchone()["c"]
     rows = db.execute("SELECT status, COUNT(*) AS c FROM notification_deliveries GROUP BY status").fetchall()

@@ -8,6 +8,14 @@ request is received" -> Parse JSON -> "Post message in a chat or channel"
 JSON body and posts a private message to that person - so `destination`
 here is the recipient's email address, exactly like the tested
 test_teams_webhook.py script.
+
+Threading: `thread_key` is accepted (for interface parity with the other
+providers - see app/providers/base.py:ProviderResult) but intentionally
+unused. A 1:1 chat with a person is already one single, continuous
+conversation in Teams - there's no separate "thread" to opt into the way
+Slack has. Real threaded replies only exist for *channel* messages, which
+would need a different delivery mechanism entirely (Microsoft Graph API
+channel posts instead of this webhook).
 """
 import httpx
 
@@ -21,7 +29,15 @@ class TeamsProvider(NotificationProvider):
         self._webhook_url = webhook_url
         self._timeout_seconds = timeout_seconds
 
-    def send(self, *, destination: str, title: str, message: str, subject: str | None = None) -> ProviderResult:
+    def send(
+        self,
+        *,
+        destination: str,
+        title: str,
+        message: str,
+        subject: str | None = None,
+        thread_key: str | None = None,  # unused - see module docstring
+    ) -> ProviderResult:
         text = f"{title}: {message}" if title else message
         payload = {"text": text, "recipient": destination}
 

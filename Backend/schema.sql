@@ -35,3 +35,18 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
   INDEX idx_notification_deliveries_status (status),
   INDEX idx_notification_deliveries_provider_message_id (provider_message_id)
 ) ENGINE=InnoDB;
+
+-- One row per (channel, destination): remembers the anchor of the running
+-- conversation thread for that recipient on that channel, so repeated
+-- notifications to the same person group together instead of each showing
+-- up as a brand new, unrelated message.
+--   Slack -> the root message's `ts` (used as `thread_ts` on later posts)
+--   Email -> the first email's Message-ID (used as In-Reply-To/References)
+--   Teams -> unused; a 1:1 chat is already one continuous conversation
+CREATE TABLE IF NOT EXISTS channel_threads (
+  channel      VARCHAR(20)  NOT NULL,
+  destination  VARCHAR(255) NOT NULL,
+  thread_key   VARCHAR(512) NOT NULL,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (channel, destination)
+) ENGINE=InnoDB;

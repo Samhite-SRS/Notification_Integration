@@ -1,8 +1,4 @@
-"""
-REST endpoints (spec section 8, "Required APIs") plus GET /api/stats, a
-small addition beyond the mandatory list that backs the dashboard's
-total/pending/delivered/failed counters (UI Screen 1).
-"""
+
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query

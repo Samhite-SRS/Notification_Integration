@@ -22,15 +22,22 @@ def send_with_retry(
     subject: str | None,
     max_attempts: int,
     backoff_base_seconds: float,
+    thread_key: str | None = None,
     sleep_fn=time.sleep,
 ) -> tuple[ProviderResult, int]:
-    """Returns (final_result, attempts_made)."""
+    """Returns (final_result, attempts_made).
+
+    `thread_key` (see app/providers/base.py:ProviderResult) is passed
+    through unchanged on every retry attempt - it's the existing thread
+    anchor for this (channel, destination), not something retries update."""
     attempts = 0
     result: ProviderResult | None = None
 
     while attempts < max_attempts:
         attempts += 1
-        result = provider.send(destination=destination, title=title, message=message, subject=subject)
+        result = provider.send(
+            destination=destination, title=title, message=message, subject=subject, thread_key=thread_key
+        )
 
         if result.success or not result.retryable:
             break

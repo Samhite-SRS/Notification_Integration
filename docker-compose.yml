@@ -1,0 +1,104 @@
+# One-command local stack: MySQL + Backend (FastAPI) + Frontend (static
+# HTML/JS via nginx). Equivalent to the three manual steps in README.md
+# (start MySQL, `uvicorn main:app --reload --port 8000`,
+# `python3 -m http.server 5500`), just run together with `docker compose up`.
+#
+# Quick start:
+#   1. Make sure Backend/.env exists (`cp Backend/.env.example Backend/.env`)
+#      and fill in Teams/Slack/SMTP credentials if you want real delivery -
+#      leave them blank to use MockProvider, same as running it natively.
+#      Its MYSQL_* values are ignored here - this compose file always points
+#      the backend at the `mysql` service below instead (see `environment:`).
+#   2. Optionally override the MySQL root password by creating a `.env`
+#      file next to this one with MYSQL_ROOT_PASSWORD=... - defaults to
+#      "rootpass" otherwise.
+#   3. docker compose up --build
+#   4. Frontend: http://localhost:5500/index.html
+#      Backend docs: http://localhost:8000/docs
+#
+# This MySQL is a fresh, empty database living in its own Docker volume -
+# separate from any MySQL you already run natively on your machine.
+#
+# Networking note: the backend reaches MySQL by a FIXED IP (172.28.0.10)
+# on a dedicated network below, not by the Docker DNS name "mysql". This
+# works around a Docker Desktop for Mac bug where the embedded DNS
+# resolver can persistently fail to resolve service names for a
+# container started by `docker compose up`, even after the target
+# container is already healthy. A static IP sidesteps that resolver
+# entirely, so the backend no longer depends on DNS working at all.
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: notification_db
+    ports:
+      # Host 3307, not 3306 - avoids clashing with a native MySQL already
+      # running on the host (e.g. the one you use outside Docker). The
+      # backend container always reaches this over the internal Docker
+      # network at 172.28.0.10:3306 regardless - this mapping is only for
+      # connecting a MySQL client directly from your Mac if you want to.
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      notif_net:
+        ipv4_address: 172.28.0.10
+
+  backend:
+    build: ./Backend
+    restart: unless-stopped
+    env_file:
+      # Picks up TEAMS_WEBHOOK_URL / SLACK_BOT_TOKEN / SMTP_* /
+      # WEBHOOK_SHARED_SECRET / CORS_ORIGINS / RETRY_* / FORCE_MOCK_PROVIDERS.
+      - ./Backend/.env
+    environment:
+      # Always point at the mysql service above by its fixed IP (see the
+      # networking note up top) instead of the DNS name "mysql", and
+      # regardless of whatever MYSQL_* values happen to be sitting in
+      # Backend/.env from running this natively - keeps the two ways of
+      # running it from conflicting.
+      MYSQL_HOST: 172.28.0.10
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: notification_db
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      # Live-edit the same way as running uvicorn natively.
+      - ./Backend:/app
+      # ...except keep the image's own installed deps, not the host's venv.
+      - /app/.venv
+    networks:
+      - notif_net
+
+  frontend:
+    build: ./Frontend
+    restart: unless-stopped
+    ports:
+      - "5500:80"
+    depends_on:
+      - backend
+    networks:
+      - notif_net
+
+volumes:
+  mysql_data:
+
+networks:
+  notif_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

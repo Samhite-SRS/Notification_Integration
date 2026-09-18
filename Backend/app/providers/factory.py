@@ -2,7 +2,7 @@
 Turns a channel name ("teams" / "email" / "slack") into a configured
 NotificationProvider instance - the one place that knows whether real
 credentials are available. The service layer never sees this decision, it
-just calls provider.send(...) (spec section 21).
+just calls provider.send(...).
 """
 from app.config import Settings
 from app.providers.base import NotificationProvider
